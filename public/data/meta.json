@@ -1,0 +1,1 @@
+{"date_range":["2009-12-31","2023-12-29"],"n_periods":169,"factors":["EPQ","DividendRatioTTM","BP","Size"],"factor_labels":{"EPQ":"单季度EP","DividendRatioTTM":"股息率TTM","BP":"BP","Size":"市值"},"benchmark":"国证2000 (399303)","n_stocks":50,"buy_fee":0.001,"sell_fee":0.002,"weight_cap":0.4}
