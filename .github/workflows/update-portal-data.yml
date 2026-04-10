@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 concurrency:
   group: update-portal-data
   cancel-in-progress: false
@@ -30,6 +33,30 @@ jobs:
 
       - name: Install data dependencies
         run: python -m pip install -r scripts/requirements-data.txt
+
+      - name: Check database secrets
+        env:
+          GUOSEN_DB_URL: ${{ secrets.GUOSEN_DB_URL }}
+          GUOSEN_DB_HOST: ${{ secrets.GUOSEN_DB_HOST }}
+          GUOSEN_DB_USER: ${{ secrets.GUOSEN_DB_USER }}
+          GUOSEN_DB_PASSWORD: ${{ secrets.GUOSEN_DB_PASSWORD }}
+        run: |
+          if [ -n "$GUOSEN_DB_URL" ]; then
+            echo "Using GUOSEN_DB_URL."
+            exit 0
+          fi
+
+          missing=""
+          [ -z "$GUOSEN_DB_HOST" ] && missing="$missing GUOSEN_DB_HOST"
+          [ -z "$GUOSEN_DB_USER" ] && missing="$missing GUOSEN_DB_USER"
+          [ -z "$GUOSEN_DB_PASSWORD" ] && missing="$missing GUOSEN_DB_PASSWORD"
+
+          if [ -n "$missing" ]; then
+            echo "::error::Missing database secrets:$missing. Set GUOSEN_DB_URL, or set GUOSEN_DB_HOST, GUOSEN_DB_USER, and GUOSEN_DB_PASSWORD."
+            exit 1
+          fi
+
+          echo "Using split database secrets."
 
       - name: Export portal data
         env:
