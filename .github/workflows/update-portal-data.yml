@@ -18,8 +18,11 @@ concurrency:
 
 jobs:
   refresh:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64, guosen-data]
     timeout-minutes: 15
+    defaults:
+      run:
+        shell: powershell
 
     steps:
       - name: Check out repository
@@ -42,28 +45,27 @@ jobs:
           GUOSEN_DB_USER: ${{ secrets.GUOSEN_DB_USER }}
           GUOSEN_DB_PASSWORD: ${{ secrets.GUOSEN_DB_PASSWORD }}
         run: |
-          if [ -n "$GUOSEN_DB_URL" ]; then
-            echo "Using GUOSEN_DB_URL."
+          if ($env:GUOSEN_DB_URL) {
+            Write-Host "Using GUOSEN_DB_URL."
             exit 0
-          fi
+          }
 
-          missing=""
-          [ -z "$GUOSEN_DB_HOST" ] && missing="$missing GUOSEN_DB_HOST"
-          [ -z "$GUOSEN_DB_USER" ] && missing="$missing GUOSEN_DB_USER"
-          [ -z "$GUOSEN_DB_PASSWORD" ] && missing="$missing GUOSEN_DB_PASSWORD"
+          $missing = @()
+          if (-not $env:GUOSEN_DB_HOST) { $missing += "GUOSEN_DB_HOST" }
+          if (-not $env:GUOSEN_DB_USER) { $missing += "GUOSEN_DB_USER" }
+          if (-not $env:GUOSEN_DB_PASSWORD) { $missing += "GUOSEN_DB_PASSWORD" }
 
-          if [ -n "$missing" ]; then
-            echo "::error::Missing database secrets:$missing. Set GUOSEN_DB_URL, or set GUOSEN_DB_HOST, GUOSEN_DB_USER, and GUOSEN_DB_PASSWORD."
+          if ($missing.Count -gt 0) {
+            Write-Host "::error::Missing database secrets: $($missing -join ', '). Set GUOSEN_DB_URL, or set GUOSEN_DB_HOST, GUOSEN_DB_USER, and GUOSEN_DB_PASSWORD."
             exit 1
-          fi
+          }
 
-          echo "Using split database secrets."
+          Write-Host "Using split database secrets."
 
       - name: Show runner public IP
         run: |
-          echo "Runner public IPv4:"
-          curl -fsSL https://api.ipify.org
-          echo
+          Write-Host "Runner public IPv4:"
+          Invoke-RestMethod -Uri "https://api.ipify.org"
 
       - name: Test database connection
         env:
@@ -74,7 +76,7 @@ jobs:
           GUOSEN_DB_USER: ${{ secrets.GUOSEN_DB_USER }}
           GUOSEN_DB_PASSWORD: ${{ secrets.GUOSEN_DB_PASSWORD }}
         run: |
-          python - <<'PY'
+          @'
           from sqlalchemy import text
           from scripts.export_guosen_portal import get_database_engine
 
@@ -82,7 +84,7 @@ jobs:
           with engine.connect() as connection:
               value = connection.execute(text("SELECT 1")).scalar()
           print(f"database connection ok: {value}")
-          PY
+          '@ | python -
 
       - name: Check required tables
         env:
@@ -93,7 +95,7 @@ jobs:
           GUOSEN_DB_USER: ${{ secrets.GUOSEN_DB_USER }}
           GUOSEN_DB_PASSWORD: ${{ secrets.GUOSEN_DB_PASSWORD }}
         run: |
-          python - <<'PY'
+          @'
           from sqlalchemy import text
           from scripts.export_guosen_portal import get_database_engine
 
@@ -112,7 +114,7 @@ jobs:
           if missing:
               raise SystemExit(f"missing required tables: {', '.join(missing)}")
           print(f"required tables ok: {', '.join(sorted(required))}")
-          PY
+          '@ | python -
 
       - name: Export portal data
         env:
@@ -126,7 +128,7 @@ jobs:
 
       - name: Validate exported data
         run: |
-          python - <<'PY'
+          @'
           import json
           from pathlib import Path
 
@@ -142,16 +144,17 @@ jobs:
               f"nav={len(data['nav'])} annual={len(data['annual'])} "
               f"holdings={len(data['holdings'])} reports={len(data['reports'])}"
           )
-          PY
+          '@ | python -
 
       - name: Commit updated data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add public/data/portal/portal.json
-          if git diff --cached --quiet; then
-            echo "No data changes."
-          else
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "No data changes."
+          } else {
             git commit -m "chore: refresh portal data"
             git push
-          fi
+          }
