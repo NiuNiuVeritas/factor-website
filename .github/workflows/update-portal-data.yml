@@ -59,6 +59,12 @@ jobs:
 
           echo "Using split database secrets."
 
+      - name: Show runner public IP
+        run: |
+          echo "Runner public IPv4:"
+          curl -fsSL https://api.ipify.org
+          echo
+
       - name: Test database connection
         env:
           GUOSEN_DB_URL: ${{ secrets.GUOSEN_DB_URL }}
