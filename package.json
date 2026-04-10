@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "refresh:data": "python scripts/export_guosen_portal.py",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

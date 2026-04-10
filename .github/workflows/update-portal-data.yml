@@ -1,0 +1,74 @@
+name: Update portal data
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 8 * * 1-5"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-portal-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/requirements-data.txt
+
+      - name: Install data dependencies
+        run: python -m pip install -r scripts/requirements-data.txt
+
+      - name: Export portal data
+        env:
+          GUOSEN_DB_URL: ${{ secrets.GUOSEN_DB_URL }}
+          GUOSEN_DB_HOST: ${{ secrets.GUOSEN_DB_HOST }}
+          GUOSEN_DB_PORT: ${{ secrets.GUOSEN_DB_PORT }}
+          GUOSEN_DB_NAME: ${{ secrets.GUOSEN_DB_NAME }}
+          GUOSEN_DB_USER: ${{ secrets.GUOSEN_DB_USER }}
+          GUOSEN_DB_PASSWORD: ${{ secrets.GUOSEN_DB_PASSWORD }}
+        run: python scripts/export_guosen_portal.py
+
+      - name: Validate exported data
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("public/data/portal/portal.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          assert data["strategies"], "strategies is empty"
+          assert data["nav"], "nav is empty"
+          assert data["annual"], "annual is empty"
+          assert data["holdings"], "holdings is empty"
+          assert len(data["reports"]) >= 60, "reports list looks incomplete"
+          print(
+              f"validated strategies={len(data['strategies'])} "
+              f"nav={len(data['nav'])} annual={len(data['annual'])} "
+              f"holdings={len(data['holdings'])} reports={len(data['reports'])}"
+          )
+          PY
+
+      - name: Commit updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data/portal/portal.json
+          if git diff --cached --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "chore: refresh portal data"
+            git push
+          fi

@@ -7,19 +7,34 @@ export function useData<T>(name: string): { data: T | null; loading: boolean } {
   const [loading, setLoading] = useState(!cache[name]);
 
   useEffect(() => {
+    let cancelled = false;
     if (cache[name]) {
-      setData(cache[name] as T);
-      setLoading(false);
-      return;
+      queueMicrotask(() => {
+        if (!cancelled) {
+          setData(cache[name] as T);
+          setLoading(false);
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
     }
-    setLoading(true);
+    queueMicrotask(() => {
+      if (!cancelled) setLoading(true);
+    });
     fetch(`${import.meta.env.BASE_URL}data/${name}.json`)
       .then(r => r.json())
       .then(d => {
         cache[name] = d;
-        setData(d);
+        if (!cancelled) setData(d);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [name]);
 
   return { data, loading };
