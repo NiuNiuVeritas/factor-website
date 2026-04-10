@@ -21,6 +21,10 @@ sys.path.insert(0, str(ROOT))
 
 OUT_DIR = ROOT / "public" / "data" / "portal"
 
+
+def log(message: str) -> None:
+    print(message, flush=True)
+
 STRATEGIES = [
     {
         "id": "earnings-surprise",
@@ -404,7 +408,7 @@ def max_drawdown(values: list[float | None]) -> float:
 def get_database_engine() -> Engine:
     db_url = os.getenv("GUOSEN_DB_URL")
     if db_url:
-        return create_engine(db_url)
+        return create_engine(db_url, connect_args={"connect_timeout": 20})
 
     host = os.getenv("GUOSEN_DB_HOST")
     user = os.getenv("GUOSEN_DB_USER")
@@ -414,7 +418,10 @@ def get_database_engine() -> Engine:
     if host and user and password:
         safe_user = quote_plus(user)
         safe_password = quote_plus(password)
-        return create_engine(f"mysql+pymysql://{safe_user}:{safe_password}@{host}:{port}/{database}")
+        return create_engine(
+            f"mysql+pymysql://{safe_user}:{safe_password}@{host}:{port}/{database}",
+            connect_args={"connect_timeout": 20},
+        )
 
     try:
         import GuosenQuant_PortfolioDataAPI as api  # type: ignore[import-not-found]
@@ -429,19 +436,24 @@ def get_database_engine() -> Engine:
 def fetch_benchmark_maps(connection) -> dict[str, dict[str, float]]:
     output: dict[str, dict[str, float]] = {}
     for code in {strategy["benchmarkCode"] for strategy in STRATEGIES}:
+        log(f"Fetching benchmark {code}...")
         rows = connection.execute(
             text("SELECT Date, NetValue FROM benchmark_netvalue WHERE IndexCode=:code ORDER BY Date"),
             {"code": code},
         ).fetchall()
         output[code] = {iso_date(row[0]): clean_float(row[1]) for row in rows}
+        log(f"Fetched benchmark {code}: {len(rows)} rows.")
     return output
 
 
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    log("Creating database engine...")
     engine = get_database_engine()
+    log("Opening database connection...")
     with engine.connect() as connection:
+        log("Database connection opened.")
         benchmark_maps = fetch_benchmark_maps(connection)
         all_nav = []
         all_annual = []
@@ -449,6 +461,7 @@ def main() -> None:
         strategy_summaries = []
 
         for strategy in STRATEGIES:
+            log(f"Fetching nav for {strategy['displayName']}...")
             nav_rows = connection.execute(
                 text(
                     "SELECT Date, `组合净值` FROM portfolio_netvalue "
@@ -456,6 +469,7 @@ def main() -> None:
                 ),
                 {"name": strategy["dbName"]},
             ).fetchall()
+            log(f"Fetched nav for {strategy['displayName']}: {len(nav_rows)} rows.")
 
             first_benchmark = None
             normalized_rows = []
@@ -528,6 +542,7 @@ def main() -> None:
                 text("SELECT MAX(Date) FROM portfolio_weight WHERE `组合名称`=:name"),
                 {"name": strategy["dbName"]},
             ).scalar()
+            log(f"Latest holding date for {strategy['displayName']}: {iso_date(latest_weight_date)}")
             weight_rows = connection.execute(
                 text(
                     "SELECT Date, StockCode, StockName, Industry, Weight FROM portfolio_weight "
@@ -535,6 +550,7 @@ def main() -> None:
                 ),
                 {"name": strategy["dbName"], "date": latest_weight_date},
             ).fetchall()
+            log(f"Fetched holdings for {strategy['displayName']}: {len(weight_rows)} rows.")
             for row in weight_rows:
                 all_holdings.append(
                     {
@@ -560,8 +576,10 @@ def main() -> None:
         "holdings": all_holdings,
         "reports": REPORTS,
     }
-    (OUT_DIR / "portal.json").write_text(json.dumps(portal, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(
+    output_path = OUT_DIR / "portal.json"
+    log(f"Writing {output_path}...")
+    output_path.write_text(json.dumps(portal, ensure_ascii=False, indent=2), encoding="utf-8")
+    log(
         f"Exported strategies={len(strategy_summaries)} nav={len(all_nav)} "
         f"annual={len(all_annual)} holdings={len(all_holdings)} reports={len(REPORTS)}"
     )

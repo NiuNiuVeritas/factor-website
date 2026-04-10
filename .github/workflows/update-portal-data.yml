@@ -10,6 +10,7 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONUNBUFFERED: "1"
 
 concurrency:
   group: update-portal-data
@@ -57,6 +58,55 @@ jobs:
           fi
 
           echo "Using split database secrets."
+
+      - name: Test database connection
+        env:
+          GUOSEN_DB_URL: ${{ secrets.GUOSEN_DB_URL }}
+          GUOSEN_DB_HOST: ${{ secrets.GUOSEN_DB_HOST }}
+          GUOSEN_DB_PORT: ${{ secrets.GUOSEN_DB_PORT }}
+          GUOSEN_DB_NAME: ${{ secrets.GUOSEN_DB_NAME }}
+          GUOSEN_DB_USER: ${{ secrets.GUOSEN_DB_USER }}
+          GUOSEN_DB_PASSWORD: ${{ secrets.GUOSEN_DB_PASSWORD }}
+        run: |
+          python - <<'PY'
+          from sqlalchemy import text
+          from scripts.export_guosen_portal import get_database_engine
+
+          engine = get_database_engine()
+          with engine.connect() as connection:
+              value = connection.execute(text("SELECT 1")).scalar()
+          print(f"database connection ok: {value}")
+          PY
+
+      - name: Check required tables
+        env:
+          GUOSEN_DB_URL: ${{ secrets.GUOSEN_DB_URL }}
+          GUOSEN_DB_HOST: ${{ secrets.GUOSEN_DB_HOST }}
+          GUOSEN_DB_PORT: ${{ secrets.GUOSEN_DB_PORT }}
+          GUOSEN_DB_NAME: ${{ secrets.GUOSEN_DB_NAME }}
+          GUOSEN_DB_USER: ${{ secrets.GUOSEN_DB_USER }}
+          GUOSEN_DB_PASSWORD: ${{ secrets.GUOSEN_DB_PASSWORD }}
+        run: |
+          python - <<'PY'
+          from sqlalchemy import text
+          from scripts.export_guosen_portal import get_database_engine
+
+          required = {
+              "portfolio_netvalue",
+              "benchmark_netvalue",
+              "portfolio_weight",
+          }
+          engine = get_database_engine()
+          with engine.connect() as connection:
+              tables = {
+                  row[0]
+                  for row in connection.execute(text("SHOW TABLES")).fetchall()
+              }
+          missing = sorted(required - tables)
+          if missing:
+              raise SystemExit(f"missing required tables: {', '.join(missing)}")
+          print(f"required tables ok: {', '.join(sorted(required))}")
+          PY
 
       - name: Export portal data
         env:
