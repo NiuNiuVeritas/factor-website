@@ -808,7 +808,7 @@ function ResearchPage({ reports }: { reports: ReportRow[] }) {
     : `category-content category-slide-in-${slideDir}`;
 
   return (
-    <section className="page-section">
+    <section className="page-section research-page">
       <PageTitle title="研究成果展示" subtitle="年度研究报告精选" />
       <div className="category-strip">
         <div
@@ -829,10 +829,11 @@ function ResearchPage({ reports }: { reports: ReportRow[] }) {
           </button>
         ))}
       </div>
+      <div className="category-count">{visibleReports.length} 篇报告</div>
       <div className="category-content-wrapper">
         <div className={contentClass}>
           <div className="report-list">
-            {visibleReports.map((report) => (
+            {visibleReports.map((report, i) => (
               <a
                 key={report.url}
                 className="report-item"
@@ -840,6 +841,7 @@ function ResearchPage({ reports }: { reports: ReportRow[] }) {
                 target="_blank"
                 rel="noreferrer"
               >
+                <span className="report-index">{String(i + 1).padStart(2, '0')}</span>
                 <span className="report-title">{report.title}</span>
                 <ArrowRightOutlined className="report-arrow" />
               </a>
@@ -907,7 +909,6 @@ function StrategyPage({ data, selectedStrategy, strategyId, onStrategyChange }: 
 
   return (
     <section className="page-section">
-      <PageTitle title="主动量化组合" />
       <div className="strategy-switch" aria-label="策略列表">
         <div
           className="strategy-slider"
@@ -1150,7 +1151,7 @@ function buildNavOption(rows: NavRow[], benchmarkName: string) {
 function buildMiniNavOption(rows: NavRow[]) {
   return {
     animation: false,
-    grid: { left: 0, right: 0, top: 8, bottom: 48 },
+    grid: { left: 0, right: 0, top: 8, bottom: 80 },
     xAxis: {
       type: 'category',
       show: false,
