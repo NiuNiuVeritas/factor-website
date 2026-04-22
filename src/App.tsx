@@ -170,7 +170,7 @@ const teamMembers: TeamMember[] = [
     summary: '主要研究方向为量化选股与行业轮动。2024年作为团队成员获得新财富金融工程方向第4名。',
   },
   {
-    name: '俞路琦',
+    name: '俞璐琦',
     title: '金融工程分析师助理',
     education: '上海财经大学硕士',
     summary: '主要研究方向为基金研究。',
