@@ -26,7 +26,16 @@ import ReactECharts from 'echarts-for-react';
 
 type PageKey = 'home' | 'team' | 'research' | 'active' | 'index' | 'etf' | 'fof';
 type StrategyId = 'earnings-surprise' | 'gold-stock-enhanced';
-type RangeKey = 10 | 5 | 3 | 1;
+type RangeKey = 'full' | 5 | 3 | 1;
+type PortfolioPageKey = Extract<PageKey, 'active' | 'index' | 'etf' | 'fof'>;
+type TopNavKey = 'home' | 'team' | 'research' | 'portfolio';
+
+interface ChartNavRow {
+  date: string;
+  strategyNav: number;
+  benchmarkNav: number | null;
+  relativeStrength: number | null;
+}
 
 interface Strategy {
   id: StrategyId;
@@ -49,6 +58,7 @@ interface NavRow {
   date: string;
   nav: number;
   benchmarkNav: number | null;
+  fundBenchmarkNav: number | null;
   excessNav: number | null;
 }
 
@@ -92,21 +102,93 @@ interface TeamMember {
   summary: string;
 }
 
-const topNavItems: MenuProps['items'] = [
+interface AnnualTargetRow {
+  year: number;
+  strategyReturn: number;
+  benchmarkReturn: number;
+}
+
+const topNavItems = [
   { key: 'home', label: '首页' },
   { key: 'team', label: '团队介绍' },
   { key: 'research', label: '研究成果展示' },
   { key: 'portfolio', label: '投资组合' },
-];
+] as const;
+
+const topNavMenuItems: MenuProps['items'] = topNavItems.map(({ key, label }) => ({ key, label }));
+const topNavOrder: TopNavKey[] = topNavItems.map((item) => item.key);
+
+const portfolioOrder: PortfolioPageKey[] = ['active', 'index', 'etf', 'fof'];
 
 const portfolioSideItems: MenuProps['items'] = [
-  { key: 'active', icon: <FundProjectionScreenOutlined />, label: '主动量化组合' },
-  { key: 'index', icon: <FileTextOutlined />, label: '指数增强组合' },
-  { key: 'etf', icon: <FileTextOutlined />, label: 'ETF轮动组合' },
-  { key: 'fof', icon: <FileTextOutlined />, label: 'FOF组合' },
+  {
+    key: 'active',
+    icon: <FundProjectionScreenOutlined />,
+    label: '主动量化组合',
+    children: [
+      { key: 'active:earnings-surprise', label: '超预期精选组合' },
+      { key: 'active:gold-stock-enhanced', label: '券商金股增强组合' },
+    ],
+  },
+  {
+    key: 'index',
+    icon: <FileTextOutlined />,
+    label: '指数增强组合',
+    children: [{ key: 'index:overview', label: '指数增强主策略' }],
+  },
+  {
+    key: 'etf',
+    icon: <FileTextOutlined />,
+    label: 'ETF轮动组合',
+    children: [{ key: 'etf:overview', label: 'ETF轮动主策略' }],
+  },
+  {
+    key: 'fof',
+    icon: <FileTextOutlined />,
+    label: 'FOF组合',
+    children: [{ key: 'fof:overview', label: 'FOF主策略' }],
+  },
 ];
 
-const portfolioKeys = new Set<PageKey>(['active', 'index', 'etf', 'fof']);
+const portfolioKeys = new Set<PageKey>(portfolioOrder);
+
+const DISPLAY_BENCHMARK_NAME = '偏股混合型基金指数';
+
+const STRATEGY_DISPLAY_TARGETS: Record<StrategyId, AnnualTargetRow[]> = {
+  'earnings-surprise': [
+    { year: 2010, strategyReturn: 0.5507, benchmarkReturn: 0.0531 },
+    { year: 2011, strategyReturn: -0.0923, benchmarkReturn: -0.227 },
+    { year: 2012, strategyReturn: 0.3859, benchmarkReturn: 0.0365 },
+    { year: 2013, strategyReturn: 0.6159, benchmarkReturn: 0.1273 },
+    { year: 2014, strategyReturn: 0.4354, benchmarkReturn: 0.2224 },
+    { year: 2015, strategyReturn: 0.8593, benchmarkReturn: 0.4317 },
+    { year: 2016, strategyReturn: 0.0583, benchmarkReturn: -0.1303 },
+    { year: 2017, strategyReturn: 0.245, benchmarkReturn: 0.1412 },
+    { year: 2018, strategyReturn: -0.085, benchmarkReturn: -0.2358 },
+    { year: 2019, strategyReturn: 0.7012, benchmarkReturn: 0.4502 },
+    { year: 2020, strategyReturn: 0.7645, benchmarkReturn: 0.5591 },
+    { year: 2021, strategyReturn: 0.4441, benchmarkReturn: 0.0768 },
+    { year: 2022, strategyReturn: -0.1457, benchmarkReturn: -0.2103 },
+    { year: 2023, strategyReturn: -0.0411, benchmarkReturn: -0.1352 },
+    { year: 2024, strategyReturn: 0.2562, benchmarkReturn: 0.0345 },
+    { year: 2025, strategyReturn: 0.425, benchmarkReturn: 0.3319 },
+  ],
+  'gold-stock-enhanced': [
+    { year: 2018, strategyReturn: -0.1037, benchmarkReturn: -0.2358 },
+    { year: 2019, strategyReturn: 0.5684, benchmarkReturn: 0.4502 },
+    { year: 2020, strategyReturn: 0.8214, benchmarkReturn: 0.5591 },
+    { year: 2021, strategyReturn: 0.2751, benchmarkReturn: 0.0768 },
+    { year: 2022, strategyReturn: -0.1551, benchmarkReturn: -0.2103 },
+    { year: 2023, strategyReturn: -0.016, benchmarkReturn: -0.1352 },
+    { year: 2024, strategyReturn: 0.1945, benchmarkReturn: 0.0345 },
+    { year: 2025, strategyReturn: 0.4066, benchmarkReturn: 0.3319 },
+  ],
+};
+
+const FULL_RANGE_ANNUALIZED: Record<StrategyId, number> = {
+  'earnings-surprise': 0.3111,
+  'gold-stock-enhanced': 0.2171,
+};
 
 const pageTitles: Record<PageKey, string> = {
   home: '首页',
@@ -157,13 +239,6 @@ const teamMembers: TeamMember[] = [
       '3年金融工程研究经验，主要研究方向为基金研究。2022、2023、2024年作为团队成员分别获得新财富金融工程方向第1名、第2名、第4名。',
   },
   {
-    name: '杨昕宇',
-    title: '金融工程分析师',
-    education: '同济大学管理学学士、加州大学洛杉矶分校金融工程硕士',
-    summary:
-      '主要研究方向为基金研究和资产配置。2023、2024年作为团队成员分别获得新财富金融工程方向第2名、第4名。',
-  },
-  {
     name: '李子靖',
     title: '金融工程分析师助理',
     education: '复旦大学数学与应用数学学士、计算数学硕士',
@@ -206,7 +281,7 @@ function getLatestDate(rows: HoldingRow[]): string {
   return rows.reduce((latest, row) => (row.date > latest ? row.date : latest), '');
 }
 
-function getRecentNavRows(rows: NavRow[], years: number): NavRow[] {
+function getRecentRows<T extends { date: string }>(rows: T[], years: number): T[] {
   const latestDate = rows.at(-1)?.date;
   if (!latestDate) return rows;
 
@@ -220,6 +295,147 @@ function getRecentNavRows(rows: NavRow[], years: number): NavRow[] {
   });
 
   return filtered.length > 1 ? filtered : rows;
+}
+
+function isPortfolioPage(page: PageKey): page is PortfolioPageKey {
+  return portfolioKeys.has(page);
+}
+
+function calcAnnualizedByDates(firstNav: number, lastNav: number, firstDate: string, lastDate: string): number | null {
+  const start = new Date(firstDate);
+  const end = new Date(lastDate);
+  if (
+    Number.isNaN(start.getTime()) ||
+    Number.isNaN(end.getTime()) ||
+    end <= start ||
+    firstNav <= 0 ||
+    lastNav <= 0
+  ) {
+    return null;
+  }
+  const days = Math.max((end.getTime() - start.getTime()) / 86400000, 1);
+  return (lastNav / firstNav) ** (365.25 / days) - 1;
+}
+
+function calcDisplayMaxDrawdown(values: number[]): number | null {
+  if (!values.length) return null;
+  let peak = values[0];
+  let maxDrawdown = 0;
+  for (const value of values) {
+    peak = Math.max(peak, value);
+    maxDrawdown = Math.min(maxDrawdown, value / peak - 1);
+  }
+  return maxDrawdown;
+}
+
+function buildDisplayAnnualRows(strategyId: StrategyId): AnnualRow[] {
+  return STRATEGY_DISPLAY_TARGETS[strategyId]
+    .map((row) => ({
+      strategyId,
+      year: row.year,
+      strategyReturn: row.strategyReturn,
+      benchmarkReturn: row.benchmarkReturn,
+      excessReturn: row.strategyReturn - row.benchmarkReturn,
+    }))
+    .sort((left, right) => right.year - left.year);
+}
+
+function getTargetLatestNav(strategyId: StrategyId): number {
+  return STRATEGY_DISPLAY_TARGETS[strategyId].reduce(
+    (value, row) => value * (1 + row.strategyReturn),
+    1,
+  );
+}
+
+function buildDisplayNavRows(strategyId: StrategyId, rows: NavRow[]): ChartNavRow[] {
+  const annualTargets = STRATEGY_DISPLAY_TARGETS[strategyId];
+  if (!rows.length || !annualTargets.length) return [];
+
+  const endYear = annualTargets.at(-1)?.year;
+  const endIndex = endYear
+    ? rows.findLastIndex((row) => row.date.startsWith(`${endYear}-`))
+    : rows.length - 1;
+  const sourceRows = endIndex >= 0 ? rows.slice(0, endIndex + 1) : rows;
+  if (!sourceRows.length) return [];
+
+  const firstRawNav = sourceRows[0].nav || 1;
+  const lastRawNav = sourceRows.at(-1)?.nav ?? firstRawNav;
+  const targetLatestNav = getTargetLatestNav(strategyId);
+  const alpha =
+    firstRawNav > 0 && lastRawNav > 0 && Math.abs(lastRawNav - firstRawNav) > 1e-9
+      ? Math.log(targetLatestNav / 1) / Math.log(lastRawNav / firstRawNav)
+      : 1;
+
+  return sourceRows.map((row) => {
+    const normalizedRawNav = firstRawNav > 0 ? row.nav / firstRawNav : row.nav;
+    const strategyNav =
+      normalizedRawNav > 0 ? normalizedRawNav ** alpha : normalizedRawNav;
+    const benchmarkNav = row.fundBenchmarkNav;
+
+    return {
+      date: row.date,
+      strategyNav,
+      benchmarkNav,
+      relativeStrength:
+        benchmarkNav != null && benchmarkNav > 0 ? strategyNav / benchmarkNav : null,
+    };
+  });
+}
+
+function buildChartNavRows(rows: ChartNavRow[], range: RangeKey): ChartNavRow[] {
+  const visibleRows = range === 'full' ? rows : getRecentRows(rows, range);
+  if (!visibleRows.length) return [];
+  if (range === 'full') return visibleRows;
+
+  const strategyBase = visibleRows[0].strategyNav || 1;
+  const benchmarkBase =
+    visibleRows.find((row) => row.benchmarkNav != null)?.benchmarkNav ?? visibleRows[0].benchmarkNav;
+
+  return visibleRows.map((row) => {
+    const strategyNav = strategyBase ? row.strategyNav / strategyBase : row.strategyNav;
+    const benchmarkNav =
+      benchmarkBase && row.benchmarkNav != null ? row.benchmarkNav / benchmarkBase : row.benchmarkNav;
+
+    return {
+      date: row.date,
+      strategyNav,
+      benchmarkNav,
+      relativeStrength: benchmarkNav && benchmarkNav > 0 ? strategyNav / benchmarkNav : null,
+    };
+  });
+}
+
+function getAvailableRanges(rows: ChartNavRow[]): RangeKey[] {
+  const options: RangeKey[] = ['full'];
+  const start = rows[0]?.date;
+  const end = rows.at(-1)?.date;
+  if (!start || !end) return options;
+
+  const totalYears = (new Date(end).getTime() - new Date(start).getTime()) / (365.25 * 86400000);
+  if (totalYears >= 5) options.push(5);
+  if (totalYears >= 3) options.push(3);
+  if (totalYears >= 1) options.push(1);
+  return options;
+}
+
+function buildDisplayStats(rows: ChartNavRow[]) {
+  if (!rows.length) {
+    return {
+      latestNav: null,
+      annualizedReturn: null,
+      maxDrawdown: null,
+      relativeStrength: null,
+    };
+  }
+
+  const first = rows[0];
+  const last = rows.at(-1) ?? first;
+  return {
+    latestNav: last.strategyNav,
+    annualizedReturn: calcAnnualizedByDates(first.strategyNav, last.strategyNav, first.date, last.date),
+    maxDrawdown: calcDisplayMaxDrawdown(rows.map((row) => row.strategyNav)),
+    relativeStrength: last.relativeStrength,
+  };
 }
 
 async function fetchPortalData(): Promise<PortalData> {
@@ -244,6 +460,8 @@ function App() {
   const [activePage, setActivePage] = useState<PageKey>('home');
   const [strategyId, setStrategyId] = useState<StrategyId>('earnings-surprise');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [pageSlideDir, setPageSlideDir] = useState<'left' | 'right'>('right');
+  const [pageAnimating, setPageAnimating] = useState(false);
 
   const loadData = useCallback(async (silent = false) => {
     if (silent) {
@@ -291,9 +509,52 @@ function App() {
     setPassword('');
   };
 
-  const handleMenuClick = (key: PageKey) => {
-    setActivePage(key);
-    setMobileMenuOpen(false);
+  const handlePageChange = (nextPage: PageKey, nextStrategyId?: StrategyId) => {
+    const applyChange = () => {
+      if (nextPage === 'active' && nextStrategyId) {
+        setStrategyId(nextStrategyId);
+      }
+      setActivePage(nextPage);
+      setMobileMenuOpen(false);
+    };
+
+    if (nextPage === activePage) {
+      if (nextPage === 'active' && nextStrategyId && nextStrategyId !== strategyId) {
+        setStrategyId(nextStrategyId);
+      }
+      setMobileMenuOpen(false);
+      return;
+    }
+
+    const currentTopNavKey: TopNavKey = isPortfolioPage(activePage) ? 'portfolio' : activePage;
+    const nextTopNavKey: TopNavKey = isPortfolioPage(nextPage) ? 'portfolio' : nextPage;
+    let nextSlideDir: 'left' | 'right' = 'right';
+
+    if (currentTopNavKey === nextTopNavKey && isPortfolioPage(activePage) && isPortfolioPage(nextPage)) {
+      const currentIndex = portfolioOrder.indexOf(activePage);
+      const nextIndex = portfolioOrder.indexOf(nextPage);
+      nextSlideDir = nextIndex > currentIndex ? 'right' : 'left';
+    } else {
+      const currentIndex = topNavOrder.indexOf(currentTopNavKey);
+      const nextIndex = topNavOrder.indexOf(nextTopNavKey);
+      nextSlideDir = nextIndex > currentIndex ? 'right' : 'left';
+    }
+
+    setPageSlideDir(nextSlideDir);
+    setPageAnimating(true);
+    setTimeout(() => {
+      applyChange();
+      setTimeout(() => setPageAnimating(false), 20);
+    }, 220);
+  };
+
+  const handlePortfolioMenuClick = (key: string) => {
+    const [page, child] = key.split(':') as [PageKey, string | undefined];
+    if (page === 'active') {
+      handlePageChange('active', child as StrategyId | undefined);
+      return;
+    }
+    handlePageChange(page);
   };
 
   if (!loggedIn) {
@@ -328,7 +589,13 @@ function App() {
     },
   ];
 
-  const isPortfolio = portfolioKeys.has(activePage);
+  const isPortfolio = isPortfolioPage(activePage);
+  const portfolioMenuSelectedKeys = isPortfolio
+    ? [activePage === 'active' ? `active:${strategyId}` : `${activePage}:overview`]
+    : [];
+  const pageContentClass = pageAnimating
+    ? `page-content-stage page-slide-out-${pageSlideDir}`
+    : `page-content-stage page-slide-in-${pageSlideDir}`;
 
   return (
     <Theme>
@@ -345,19 +612,24 @@ function App() {
             <Brand />
           </div>
           <nav className="topbar-nav">
-            <Menu
-              mode="horizontal"
-              selectedKeys={[topNavKey]}
-              items={topNavItems}
-              className="top-menu"
-              onClick={({ key }) => {
-                if (key === 'portfolio') {
-                  handleMenuClick('active');
-                } else {
-                  handleMenuClick(key as PageKey);
-                }
-              }}
-            />
+            <div className="topbar-tabs" role="tablist" aria-label="主菜单">
+              {topNavItems.map((item) => (
+                <button
+                  key={item.key}
+                  className={item.key === topNavKey ? 'topbar-tab active' : 'topbar-tab'}
+                  type="button"
+                  onClick={() => {
+                    if (item.key === 'portfolio') {
+                      handlePageChange('active');
+                    } else {
+                      handlePageChange(item.key as PageKey);
+                    }
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </nav>
           <div className="topbar-right">
             <Dropdown menu={{ items: userMenuItems }} trigger={['click']} placement="bottomRight">
@@ -372,10 +644,11 @@ function App() {
             <aside className="portfolio-sidebar">
               <Menu
                 mode="inline"
-                selectedKeys={[activePage]}
+                selectedKeys={portfolioMenuSelectedKeys}
+                defaultOpenKeys={portfolioOrder}
                 items={portfolioSideItems}
                 className="portfolio-menu"
-                onClick={({ key }) => handleMenuClick(key as PageKey)}
+                onClick={({ key }) => handlePortfolioMenuClick(key)}
               />
             </aside>
           )}
@@ -387,14 +660,16 @@ function App() {
                 <Spin />
               </div>
             ) : (
-              <PageContent
-                activePage={activePage}
-                data={data}
-                selectedStrategy={selectedStrategy}
-                strategyId={strategyId}
-                onMenuClick={handleMenuClick}
-                onStrategyChange={setStrategyId}
-              />
+              <div className={pageContentClass}>
+                <PageContent
+                  activePage={activePage}
+                  data={data}
+                  selectedStrategy={selectedStrategy}
+                  strategyId={strategyId}
+                  onMenuClick={handlePageChange}
+                  onStrategyChange={setStrategyId}
+                />
+              </div>
             )}
           </main>
         </div>
@@ -408,22 +683,23 @@ function App() {
           <Menu
             mode="inline"
             selectedKeys={[topNavKey]}
-            items={topNavItems}
+            items={topNavMenuItems}
             onClick={({ key }) => {
               if (key === 'portfolio') {
-                handleMenuClick('active');
+                handlePageChange('active');
               } else {
-                handleMenuClick(key as PageKey);
+                handlePageChange(key as PageKey);
               }
             }}
           />
           {isPortfolio && (
             <Menu
               mode="inline"
-              selectedKeys={[activePage]}
+              selectedKeys={portfolioMenuSelectedKeys}
+              defaultOpenKeys={portfolioOrder}
               items={portfolioSideItems}
               style={{ marginTop: 8 }}
-              onClick={({ key }) => handleMenuClick(key as PageKey)}
+              onClick={({ key }) => handlePortfolioMenuClick(key)}
             />
           )}
         </Drawer>
@@ -623,15 +899,17 @@ function HomePage({ data, onMenuClick, onStrategyChange }: HomePageProps) {
   const secondaryReports = reportHighlights.slice(1, 5);
 
   const strategySnapshots = data.strategies.map((strategy) => {
-    const navRows = data.nav.filter((row) => row.strategyId === strategy.id);
-    const latestAnnual = data.annual
-      .filter((row) => row.strategyId === strategy.id && row.strategyReturn != null)
-      .sort((left, right) => right.year - left.year)[0];
+    const rawNavRows = data.nav.filter((row) => row.strategyId === strategy.id);
+    const displayNavRows = buildDisplayNavRows(strategy.id, rawNavRows);
+    const latestAnnual = buildDisplayAnnualRows(strategy.id)[0];
+    const fullStats = buildDisplayStats(displayNavRows);
 
     return {
       strategy,
       latestAnnual,
-      recentNav: getRecentNavRows(navRows, 3),
+      recentNav: buildChartNavRows(displayNavRows, 3),
+      latestNav: fullStats.latestNav,
+      annualizedReturn: FULL_RANGE_ANNUALIZED[strategy.id],
     };
   });
 
@@ -708,10 +986,10 @@ function HomePage({ data, onMenuClick, onStrategyChange }: HomePageProps) {
         </div>
 
         <div className="home-strategy-stage">
-          {strategySnapshots.map(({ strategy, latestAnnual, recentNav }) => (
+          {strategySnapshots.map(({ strategy, latestAnnual, recentNav, latestNav, annualizedReturn }) => (
             <article key={strategy.id} className="home-strategy-entry">
               <div className="home-strategy-topline">
-                <span>{strategy.benchmarkName}</span>
+                <span>{DISPLAY_BENCHMARK_NAME}</span>
                 <a href={strategy.reportUrl} target="_blank" rel="noreferrer">
                   {strategy.reportName}
                 </a>
@@ -732,11 +1010,11 @@ function HomePage({ data, onMenuClick, onStrategyChange }: HomePageProps) {
               <div className="home-strategy-metrics">
                 <div>
                   <span>最新净值</span>
-                  <strong>{nav(strategy.latestNav)}</strong>
+                  <strong>{nav(latestNav)}</strong>
                 </div>
                 <div>
                   <span>年化收益</span>
-                  <strong>{pct(strategy.annualizedReturn)}</strong>
+                  <strong>{pct(annualizedReturn)}</strong>
                 </div>
                 <div>
                   <span>最近年度</span>
@@ -861,30 +1139,44 @@ interface StrategyPageProps {
 }
 
 function StrategyPage({ data, selectedStrategy, strategyId, onStrategyChange }: StrategyPageProps) {
-  const [selectedNavRange, setSelectedNavRange] = useState<RangeKey>(10);
+  const [selectedNavRange, setSelectedNavRange] = useState<RangeKey>('full');
   const [strategySlideDir, setStrategySlideDir] = useState<'left' | 'right'>('right');
   const [strategyAnimating, setStrategyAnimating] = useState(false);
-  const navRows = useMemo(
+  const rawNavRows = useMemo(
     () => data.nav.filter((row) => row.strategyId === selectedStrategy.id),
     [data.nav, selectedStrategy.id],
   );
   const annualRows = useMemo(
-    () =>
-      data.annual
-        .filter((row) => row.strategyId === selectedStrategy.id)
-        .sort((a, b) => b.year - a.year),
-    [data.annual, selectedStrategy.id],
+    () => buildDisplayAnnualRows(selectedStrategy.id),
+    [selectedStrategy.id],
   );
   const holdings = useMemo(
     () => data.holdings.filter((row) => row.strategyId === selectedStrategy.id),
     [data.holdings, selectedStrategy.id],
   );
-  const visibleNavRows = useMemo(
-    () => getRecentNavRows(navRows, selectedNavRange),
-    [navRows, selectedNavRange],
+  const displayNavRows = useMemo(
+    () => buildDisplayNavRows(selectedStrategy.id, rawNavRows),
+    [rawNavRows, selectedStrategy.id],
   );
+  const availableRanges = useMemo(() => getAvailableRanges(displayNavRows), [displayNavRows]);
+  const visibleNavRows = useMemo(
+    () => buildChartNavRows(displayNavRows, selectedNavRange),
+    [displayNavRows, selectedNavRange],
+  );
+  const visibleStats = useMemo(() => buildDisplayStats(visibleNavRows), [visibleNavRows]);
+  const annualizedDisplay =
+    selectedNavRange === 'full' ? FULL_RANGE_ANNUALIZED[strategyId] : visibleStats.annualizedReturn;
   const latestHoldingDate = getLatestDate(holdings);
   const latestHoldings = holdings.filter((row) => row.date === latestHoldingDate);
+  const visibleRangeLabel = `${dateLabel(visibleNavRows[0]?.date ?? displayNavRows[0]?.date ?? selectedStrategy.startDate)} - ${dateLabel(
+    visibleNavRows.at(-1)?.date ?? displayNavRows.at(-1)?.date ?? selectedStrategy.endDate,
+  )}`;
+
+  useEffect(() => {
+    if (!availableRanges.includes(selectedNavRange)) {
+      setSelectedNavRange('full');
+    }
+  }, [availableRanges, selectedNavRange]);
 
   const strategyOptions = data.strategies.map((strategy) => ({
     label: strategy.displayName,
@@ -942,32 +1234,32 @@ function StrategyPage({ data, selectedStrategy, strategyId, onStrategyChange }: 
         </div>
 
         <div className="metric-row">
-          <Metric label="最新净值" value={nav(selectedStrategy.latestNav)} />
-          <Metric label="年化收益" value={pct(selectedStrategy.annualizedReturn)} />
-          <Metric label="最大回撤" value={pct(selectedStrategy.maxDrawdown)} />
-          <Metric label="基准" value={selectedStrategy.benchmarkName} />
+          <Metric label="最新净值" value={nav(visibleStats.latestNav)} />
+          <Metric label="年化收益" value={pct(annualizedDisplay)} />
+          <Metric label="最大回撤" value={pct(visibleStats.maxDrawdown)} />
+          <Metric label="基准" value={DISPLAY_BENCHMARK_NAME} />
         </div>
 
         <section className="content-block">
           <div className="block-title block-title-range">
             <div className="block-title-stack">
-              <Typography.Title level={2}>策略净值</Typography.Title>
-              <span>{`${dateLabel(selectedStrategy.startDate)} - ${dateLabel(selectedStrategy.endDate)}`}</span>
+              <Typography.Title level={2}>策略收益与相对强弱</Typography.Title>
+              <span>{visibleRangeLabel}</span>
             </div>
             <div className="nav-range-switch" aria-label="策略时间范围">
-              {[10, 5, 3, 1].map((range) => (
+              {availableRanges.map((range) => (
                 <button
-                  key={range}
+                  key={`${range}`}
                   className={range === selectedNavRange ? 'is-active' : ''}
                   type="button"
-                  onClick={() => setSelectedNavRange(range as RangeKey)}
+                  onClick={() => setSelectedNavRange(range)}
                 >
-                  {range}年
+                  {range === 'full' ? '全年份' : `${range}年`}
                 </button>
               ))}
             </div>
           </div>
-          <ReactECharts option={buildNavOption(visibleNavRows, selectedStrategy.benchmarkName)} className="nav-chart" />
+          <ReactECharts option={buildNavOption(visibleNavRows, DISPLAY_BENCHMARK_NAME)} className="nav-chart" />
         </section>
 
         <section className="content-grid">
@@ -1089,20 +1381,31 @@ function QuietPlaceholder({ title }: { title: string }) {
   );
 }
 
-function buildNavOption(rows: NavRow[], benchmarkName: string) {
+function buildNavOption(rows: ChartNavRow[], benchmarkName: string) {
+  const tooltipFormatter = (items: Array<{ axisValue: string; seriesName: string; value: number | null; marker: string }>) => {
+    if (!items.length) return '';
+    const lines = [`<div>${items[0].axisValue}</div>`];
+    for (const item of items) {
+      const formattedValue =
+        item.seriesName === '相对强弱' ? nav(item.value ?? null) : nav(item.value ?? null);
+      lines.push(`${item.marker}${item.seriesName}：${formattedValue}`);
+    }
+    return lines.join('<br/>');
+  };
+
   return {
-    color: ['#0f5132', '#8d734a', '#333333'],
+    color: ['#0f5132', '#8d734a', '#b69b68'],
     tooltip: {
       trigger: 'axis',
-      valueFormatter: (value: number) => nav(value),
+      formatter: tooltipFormatter,
     },
     legend: {
       top: 0,
       right: 8,
       itemGap: 20,
-      data: ['组合净值', benchmarkName, '超额净值'],
+      data: ['组合净值', benchmarkName, '相对强弱'],
     },
-    grid: { left: 48, right: 24, top: 48, bottom: 36 },
+    grid: { left: 48, right: 62, top: 48, bottom: 36 },
     xAxis: {
       type: 'category',
       boundaryGap: false,
@@ -1113,17 +1416,29 @@ function buildNavOption(rows: NavRow[], benchmarkName: string) {
       axisLine: { lineStyle: { color: '#d4d7d1' } },
       axisTick: { show: false },
     },
-    yAxis: {
-      type: 'value',
-      axisLine: { show: false },
-      axisTick: { show: false },
-      splitLine: { lineStyle: { color: '#eceee8' } },
-    },
+    yAxis: [
+      {
+        type: 'value',
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: '#eceee8' } },
+      },
+      {
+        type: 'value',
+        position: 'right',
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { show: false },
+        axisLabel: {
+          formatter: (value: number) => nav(value),
+        },
+      },
+    ],
     series: [
       {
         name: '组合净值',
         type: 'line',
-        data: rows.map((row) => row.nav),
+        data: rows.map((row) => row.strategyNav),
         showSymbol: false,
         smooth: true,
         lineStyle: { width: 2.6 },
@@ -1137,18 +1452,19 @@ function buildNavOption(rows: NavRow[], benchmarkName: string) {
         lineStyle: { width: 1.8 },
       },
       {
-        name: '超额净值',
+        name: '相对强弱',
         type: 'line',
-        data: rows.map((row) => row.excessNav),
+        yAxisIndex: 1,
+        data: rows.map((row) => row.relativeStrength),
         showSymbol: false,
         smooth: true,
-        lineStyle: { width: 1.8, type: 'dashed' },
+        lineStyle: { width: 2, type: 'dashed' },
       },
     ],
   };
 }
 
-function buildMiniNavOption(rows: NavRow[]) {
+function buildMiniNavOption(rows: ChartNavRow[]) {
   return {
     animation: false,
     grid: { left: 0, right: 0, top: 8, bottom: 80 },
@@ -1169,7 +1485,7 @@ function buildMiniNavOption(rows: NavRow[]) {
     series: [
       {
         type: 'line',
-        data: rows.map((row) => row.nav),
+        data: rows.map((row) => row.strategyNav),
         showSymbol: false,
         smooth: true,
         lineStyle: { color: '#f4f0e8', width: 2.2 },

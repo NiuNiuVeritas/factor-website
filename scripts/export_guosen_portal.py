@@ -7,7 +7,6 @@ import json
 import math
 import os
 import sys
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -18,8 +17,10 @@ from urllib.parse import quote_plus
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT.parent))
 
 OUT_DIR = ROOT / "public" / "data" / "portal"
+FUND_BENCHMARK_CODE = "h00922.CSI"
 
 
 def log(message: str) -> None:
@@ -42,8 +43,8 @@ STRATEGIES = [
         "dbName": "券商金股增强",
         "displayName": "券商金股增强组合",
         "type": "主动量化组合",
-        "benchmarkCode": "h00922.CSI",
-        "benchmarkName": "偏股基金指数",
+        "benchmarkCode": "000905.SH",
+        "benchmarkName": "中证500",
         "reportName": "券商金股全解析—数据、建模与实践",
         "reportUrl": "http://mp.weixin.qq.com/s?__biz=MzI5MzcwNTQ4NQ==&mid=2247504336&idx=1&sn=936266d778a201a485a54b264b219084&chksm=ec6c93b2db1b1aa4efb4b5ce7e95fc0624c21eeadac2ec02a8c3fb65f75dde7a7d24464df63c&scene=21#wechat_redirect",
         "description": "以券商金股股票池为基础，通过组合优化控制个股与风格偏离。",
@@ -405,6 +406,45 @@ def max_drawdown(values: list[float | None]) -> float:
     return worst
 
 
+def build_annual_rows(strategy_id: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    year_end_rows: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        year_end_rows[int(row["date"][:4])] = row
+
+    annual_rows: list[dict[str, Any]] = []
+    anchor_row = rows[0] if rows else None
+    for year in sorted(year_end_rows):
+        year_end = year_end_rows[year]
+        if not anchor_row:
+            anchor_row = year_end
+            continue
+
+        strategy_return = (
+            year_end["nav"] / anchor_row["nav"] - 1
+            if anchor_row["nav"] and year_end["nav"]
+            else None
+        )
+        benchmark_return = (
+            year_end["benchmarkNav"] / anchor_row["benchmarkNav"] - 1
+            if anchor_row["benchmarkNav"] and year_end["benchmarkNav"]
+            else None
+        )
+        annual_rows.append(
+            {
+                "strategyId": strategy_id,
+                "year": year,
+                "strategyReturn": clean_float(strategy_return),
+                "benchmarkReturn": clean_float(benchmark_return),
+                "excessReturn": clean_float(strategy_return - benchmark_return)
+                if strategy_return is not None and benchmark_return is not None
+                else None,
+            }
+        )
+        anchor_row = year_end
+
+    return annual_rows
+
+
 def get_database_engine() -> Engine:
     db_url = os.getenv("GUOSEN_DB_URL")
     if db_url:
@@ -435,7 +475,9 @@ def get_database_engine() -> Engine:
 
 def fetch_benchmark_maps(connection) -> dict[str, dict[str, float]]:
     output: dict[str, dict[str, float]] = {}
-    for code in {strategy["benchmarkCode"] for strategy in STRATEGIES}:
+    benchmark_codes = {strategy["benchmarkCode"] for strategy in STRATEGIES}
+    benchmark_codes.add(FUND_BENCHMARK_CODE)
+    for code in benchmark_codes:
         log(f"Fetching benchmark {code}...")
         rows = connection.execute(
             text("SELECT Date, NetValue FROM benchmark_netvalue WHERE IndexCode=:code ORDER BY Date"),
@@ -472,51 +514,38 @@ def main() -> None:
             log(f"Fetched nav for {strategy['displayName']}: {len(nav_rows)} rows.")
 
             first_benchmark = None
+            first_fund_benchmark = None
             normalized_rows = []
             benchmark_by_date = benchmark_maps[strategy["benchmarkCode"]]
+            fund_benchmark_by_date = benchmark_maps[FUND_BENCHMARK_CODE]
             for row in nav_rows:
                 date = iso_date(row[0])
                 nav = clean_float(row[1])
                 raw_benchmark = benchmark_by_date.get(date)
+                raw_fund_benchmark = fund_benchmark_by_date.get(date)
                 if first_benchmark is None and raw_benchmark:
                     first_benchmark = raw_benchmark
+                if first_fund_benchmark is None and raw_fund_benchmark:
+                    first_fund_benchmark = raw_fund_benchmark
                 benchmark_nav = raw_benchmark / first_benchmark if raw_benchmark and first_benchmark else None
+                fund_benchmark_nav = (
+                    raw_fund_benchmark / first_fund_benchmark
+                    if raw_fund_benchmark and first_fund_benchmark
+                    else None
+                )
                 normalized_rows.append(
                     {
                         "strategyId": strategy["id"],
                         "date": date,
                         "nav": nav,
                         "benchmarkNav": benchmark_nav,
+                        "fundBenchmarkNav": fund_benchmark_nav,
                         "excessNav": nav / benchmark_nav if nav and benchmark_nav else None,
                     }
                 )
             all_nav.extend(normalized_rows)
 
-            by_year: dict[int, list[dict[str, Any]]] = defaultdict(list)
-            for row in normalized_rows:
-                by_year[int(row["date"][:4])].append(row)
-            for year, rows in sorted(by_year.items()):
-                if len(rows) < 2:
-                    continue
-                first = rows[0]
-                last = rows[-1]
-                strategy_return = last["nav"] / first["nav"] - 1 if first["nav"] else None
-                benchmark_return = (
-                    last["benchmarkNav"] / first["benchmarkNav"] - 1
-                    if first["benchmarkNav"] and last["benchmarkNav"]
-                    else None
-                )
-                all_annual.append(
-                    {
-                        "strategyId": strategy["id"],
-                        "year": year,
-                        "strategyReturn": clean_float(strategy_return),
-                        "benchmarkReturn": clean_float(benchmark_return),
-                        "excessReturn": clean_float(strategy_return - benchmark_return)
-                        if strategy_return is not None and benchmark_return is not None
-                        else None,
-                    }
-                )
+            all_annual.extend(build_annual_rows(strategy["id"], normalized_rows))
 
             latest_nav = normalized_rows[-1] if normalized_rows else None
             first_nav = normalized_rows[0] if normalized_rows else None
