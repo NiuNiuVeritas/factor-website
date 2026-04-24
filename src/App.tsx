@@ -1259,7 +1259,10 @@ function StrategyPage({ data, selectedStrategy, strategyId, onStrategyChange }: 
               ))}
             </div>
           </div>
-          <ReactECharts option={buildNavOption(visibleNavRows, DISPLAY_BENCHMARK_NAME)} className="nav-chart" />
+          <ReactECharts
+            option={buildNavOption(visibleNavRows, DISPLAY_BENCHMARK_NAME, selectedNavRange)}
+            className="nav-chart"
+          />
         </section>
 
         <section className="content-grid">
@@ -1381,7 +1384,56 @@ function QuietPlaceholder({ title }: { title: string }) {
   );
 }
 
-function buildNavOption(rows: ChartNavRow[], benchmarkName: string) {
+function getNiceStep(rawStep: number) {
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep || 1));
+  const normalized = rawStep / magnitude;
+  const niceNormalized = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return niceNormalized * magnitude;
+}
+
+function buildAxisBounds(
+  values: Array<number | null | undefined>,
+  floor = 0,
+  targetSplits = 4,
+  minInterval?: number,
+) {
+  const finiteValues = values.filter((value): value is number => Number.isFinite(value));
+  if (!finiteValues.length) {
+    return { min: floor, max: 1, interval: minInterval ?? 0.2 };
+  }
+
+  const minValue = Math.min(...finiteValues);
+  const maxValue = Math.max(...finiteValues);
+  const span = Math.max(maxValue - minValue, maxValue * 0.08, 0.1);
+  const rawMin = Math.max(floor, minValue - span * 0.08);
+  const rawMax = maxValue + span * 0.08;
+  const interval = Math.max(getNiceStep((rawMax - rawMin) / targetSplits), minInterval ?? 0);
+  const alignedMin = Math.floor(rawMin / interval) * interval;
+  const clampedMin = Math.ceil(floor / interval) * interval;
+  const min = clampedMin <= minValue ? clampedMin : alignedMin;
+  const max = Math.ceil(rawMax / interval) * interval;
+
+  return {
+    min: Number(min.toFixed(2)),
+    max: Number(max.toFixed(2)),
+    interval: Number(interval.toFixed(2)),
+  };
+}
+
+function buildNavOption(rows: ChartNavRow[], benchmarkName: string, range: RangeKey) {
+  const floor = range === 'full' ? 0 : 0.7;
+  const performanceBounds = buildAxisBounds(
+    rows.flatMap((row) => [row.strategyNav, row.benchmarkNav]),
+    floor,
+    4,
+    range === 'full' ? undefined : 0.2,
+  );
+  const relativeBounds = buildAxisBounds(
+    rows.flatMap((row) => [row.relativeStrength, 1]),
+    floor,
+    4,
+    range === 'full' ? undefined : 0.2,
+  );
   const tooltipFormatter = (items: Array<{ axisValue: string; seriesName: string; value: number | null; marker: string }>) => {
     if (!items.length) return '';
     const lines = [`<div>${items[0].axisValue}</div>`];
@@ -1394,10 +1446,14 @@ function buildNavOption(rows: ChartNavRow[], benchmarkName: string) {
   };
 
   return {
-    color: ['#0f5132', '#8d734a', '#b69b68'],
+    color: ['#8f7a55', '#c8b98f', '#557866'],
     tooltip: {
       trigger: 'axis',
       formatter: tooltipFormatter,
+      axisPointer: {
+        type: 'line',
+        link: [{ xAxisIndex: 'all' }],
+      },
     },
     legend: {
       top: 0,
@@ -1405,31 +1461,58 @@ function buildNavOption(rows: ChartNavRow[], benchmarkName: string) {
       itemGap: 20,
       data: ['组合净值', benchmarkName, '相对强弱'],
     },
-    grid: { left: 48, right: 62, top: 48, bottom: 36 },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: rows.map((row) => row.date),
-      axisLabel: {
-        formatter: (value: string) => value.slice(0, 7),
+    grid: [
+      { left: 58, right: 38, top: 50, height: '44%' },
+      { left: 58, right: 38, top: '75%', height: '18%' },
+    ],
+    xAxis: [
+      {
+        type: 'category',
+        gridIndex: 0,
+        boundaryGap: false,
+        data: rows.map((row) => row.date),
+        axisLabel: { show: false },
+        axisLine: { lineStyle: { color: '#d7dcd4', width: 1.4 } },
+        axisTick: { show: false },
       },
-      axisLine: { lineStyle: { color: '#d4d7d1' } },
-      axisTick: { show: false },
-    },
+      {
+        type: 'category',
+        gridIndex: 1,
+        boundaryGap: false,
+        data: rows.map((row) => row.date),
+        axisLabel: {
+          formatter: (value: string) => value.slice(0, 7),
+        },
+        axisLine: { lineStyle: { color: '#d4d7d1' } },
+        axisTick: { show: false },
+      },
+    ],
     yAxis: [
       {
         type: 'value',
+        gridIndex: 0,
+        min: performanceBounds.min,
+        max: performanceBounds.max,
+        interval: performanceBounds.interval,
         axisLine: { show: false },
         axisTick: { show: false },
         splitLine: { lineStyle: { color: '#eceee8' } },
+        axisLabel: {
+          margin: 14,
+          formatter: (value: number) => nav(value),
+        },
       },
       {
         type: 'value',
-        position: 'right',
+        gridIndex: 1,
+        min: relativeBounds.min,
+        max: relativeBounds.max,
+        interval: relativeBounds.interval,
         axisLine: { show: false },
         axisTick: { show: false },
-        splitLine: { show: false },
+        splitLine: { lineStyle: { color: '#eef1eb' } },
         axisLabel: {
+          margin: 14,
           formatter: (value: number) => nav(value),
         },
       },
@@ -1438,27 +1521,39 @@ function buildNavOption(rows: ChartNavRow[], benchmarkName: string) {
       {
         name: '组合净值',
         type: 'line',
+        xAxisIndex: 0,
+        yAxisIndex: 0,
         data: rows.map((row) => row.strategyNav),
         showSymbol: false,
         smooth: true,
-        lineStyle: { width: 2.6 },
+        lineStyle: { width: 2.6, opacity: 0.92 },
       },
       {
         name: benchmarkName,
         type: 'line',
+        xAxisIndex: 0,
+        yAxisIndex: 0,
         data: rows.map((row) => row.benchmarkNav),
         showSymbol: false,
         smooth: true,
-        lineStyle: { width: 1.8 },
+        lineStyle: { width: 1.8, opacity: 0.84 },
       },
       {
         name: '相对强弱',
         type: 'line',
+        xAxisIndex: 1,
         yAxisIndex: 1,
         data: rows.map((row) => row.relativeStrength),
         showSymbol: false,
         smooth: true,
-        lineStyle: { width: 2, type: 'dashed' },
+        lineStyle: { width: 2, opacity: 0.9 },
+        markLine: {
+          silent: true,
+          symbol: 'none',
+          label: { show: false },
+          lineStyle: { color: '#b9c8bf', width: 1, type: 'dashed' },
+          data: [{ yAxis: 1 }],
+        },
       },
     ],
   };
