@@ -923,7 +923,7 @@ function HomePage({ data, onMenuClick, onStrategyChange }: HomePageProps) {
         </div>
         <div className="home-hero-copy">
           <span className="home-hero-kicker">Quantitative Research Portal</span>
-          <Typography.Title level={1}>量化藏经阁</Typography.Title>
+          <Typography.Title level={1}>量化藏经阁👍</Typography.Title>
           <div className="home-rule" />
           <p>分享量化投资和FOF投资领域的研究成果。</p>
         </div>
